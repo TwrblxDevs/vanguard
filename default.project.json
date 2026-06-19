@@ -1,0 +1,6 @@
+{
+  "name": "vanguard",
+  "tree": {
+    "$path": "src/shared/Vanguard"
+  }
+}

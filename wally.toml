@@ -1,0 +1,22 @@
+[package]
+name = "twrblxdevs/vanguard"
+version = "0.1.13"
+description = "A dependency-free Knit-inspired application framework for Roblox."
+license = "MIT"
+authors = ["TwrblxDevs"]
+realm = "shared"
+registry = "https://github.com/UpliftGames/wally-index"
+
+exclude = [
+	"rokit.toml",
+	"selene.toml",
+	"sourcemap.json",
+	"Packages",
+	"tests",
+	"*.rbxl",
+	"*.rbxlx",
+	"*.rbxm",
+	"*.zip",
+]
+
+[dependencies]

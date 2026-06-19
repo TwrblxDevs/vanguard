@@ -1,0 +1,15 @@
+# Project build artifacts
+/MyFramework.rbxlx
+/Vanguard.rbxlx
+/Vanguard.rbxm
+/VanguardDev.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+sourcemap.json
+
+# Wally output
+Packages/
+*.zip
