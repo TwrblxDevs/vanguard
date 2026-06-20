@@ -1,3 +1,9 @@
+local VanguardError = if script ~= nil then require(script.Parent.Error) else require("./Error")
+
+local function assert(condition, message)
+	return VanguardError.assert(condition, "VG-UTIL-001", message, 3)
+end
+
 export type Options = {
 	DefaultTTL: number?,
 	MaxSize: number?,

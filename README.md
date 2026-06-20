@@ -4,14 +4,15 @@ Vanguard is a dependency-free Roblox application framework packaged for Wally. I
 
 ## Documentation
 
-The complete documentation lives in [docs/README.md](docs/README.md).
+The complete documentation lives at [twrblxdevs.github.io/vanguard-docs](https://twrblxdevs.github.io/vanguard-docs/).
 
-- [Getting Started](docs/getting-started/README.md)
-- [Lifecycle](docs/lifecycle/README.md)
-- [Services](docs/services/README.md), [Controllers](docs/controllers/README.md), [Components](docs/components/README.md), and [Classes](docs/classes/README.md)
-- [Networking](docs/networking/README.md) and [Network Security](docs/network-security/README.md)
-- [Promise](docs/utilities/promise/README.md) and the complete [Utilities index](docs/utilities/README.md)
-- [API Reference](docs/api-reference/README.md), [Type System](docs/type-system/README.md), and [Troubleshooting](docs/troubleshooting/README.md)
+- [Getting Started](https://twrblxdevs.github.io/vanguard-docs/getting-started/)
+- [Lifecycle](https://twrblxdevs.github.io/vanguard-docs/lifecycle/)
+- [Services](https://twrblxdevs.github.io/vanguard-docs/services/), [Controllers](https://twrblxdevs.github.io/vanguard-docs/controllers/), [Components](https://twrblxdevs.github.io/vanguard-docs/components/), and [Classes](https://twrblxdevs.github.io/vanguard-docs/classes/)
+- [Networking](https://twrblxdevs.github.io/vanguard-docs/networking/) and [Network Security](https://twrblxdevs.github.io/vanguard-docs/network-security/)
+- [Errors](https://twrblxdevs.github.io/vanguard-docs/errors/) and the complete [Utilities index](https://twrblxdevs.github.io/vanguard-docs/utilities/)
+- [API Reference](https://twrblxdevs.github.io/vanguard-docs/api-reference/), [Type System](https://twrblxdevs.github.io/vanguard-docs/type-system/), and [Troubleshooting](https://twrblxdevs.github.io/vanguard-docs/troubleshooting/)
+- [Roadmap](https://twrblxdevs.github.io/vanguard-docs/roadmap/) for upcoming platform, tooling, and community work
 
 ## Install
 
@@ -19,7 +20,7 @@ Add Vanguard to a game's `wally.toml`:
 
 ```toml
 [dependencies]
-Vanguard = "twrblxdevs/vanguard@0.1.13"
+Vanguard = "twrblxdevs/vanguard@0.1.14"
 ```
 
 Install packages:
@@ -76,6 +77,8 @@ type Controller = Vanguard.Controller
 type Component = Vanguard.Component
 type Class = Vanguard.Class
 type Cache = Vanguard.Cache
+type VanguardError = Vanguard.VanguardError
+type MathUtil = Vanguard.MathUtil
 type RateLimiter = Vanguard.RateLimiter
 type NetworkRule = Vanguard.NetworkRule
 type NetworkContext = Vanguard.NetworkContext
@@ -84,6 +87,7 @@ type Logger = Vanguard.Logger
 type Promise = Vanguard.Promise
 type RemoteSignal = Vanguard.RemoteSignal
 type RemoteProperty = Vanguard.RemoteProperty
+type Switch = Vanguard.Switch
 ```
 
 For service/controller-specific shapes, intersect your own fields with Vanguard's base types:
@@ -168,9 +172,9 @@ Services and controllers receive a scoped `Logger` automatically. Vanguard does 
 Vanguard logs startup by default at `info` level:
 
 ```text
-[Vanguard] [INFO] Starting server v0.1.13 (3 services, 2 components)
+[Vanguard] [INFO] Starting server v0.1.14 (3 services, 2 components)
 [Vanguard] [INFO] Server startup complete in 12ms
-[Vanguard] [INFO] Starting client v0.1.13 (4 controllers, 1 component)
+[Vanguard] [INFO] Starting client v0.1.14 (4 controllers, 1 component)
 [Vanguard] [INFO] Client startup complete in 8ms
 ```
 
@@ -358,6 +362,61 @@ print(Vanguard.GetClass("PlayerEntity") == PlayerEntity)
 
 Base constructors run before child constructors with the same arguments. Use `Vanguard.RegisterClass(Vanguard.Util.Class.create(...))` for externally-created classes. Class modules can return either a class or a plain class definition and be loaded with `AddClasses`, `AddClassesDeep`, or the `Classes` bootstrap field. Classes may be registered and unregistered after startup because they do not participate in lifecycle ordering.
 
+Classes can also separate public instance members, per-instance private state, and class-only static members:
+
+```lua
+local Wallet
+Wallet = Vanguard.CreateClass({
+	Name = "Wallet",
+
+	Private = {
+		Balance = 0,
+		Constructor = function(_self, private, openingBalance)
+			private.Balance = openingBalance
+		end,
+	},
+
+	Public = {
+		GetBalance = function(_self, private)
+			return private.Balance
+		end,
+	},
+
+	Static = {
+		Currency = "Credits",
+		Open = function(openingBalance)
+			return Wallet(openingBalance)
+		end,
+	},
+})
+
+local wallet = Wallet.Open(100)
+print(wallet:GetBalance()) -- 100
+print(wallet.Balance) -- nil
+print(Wallet.Currency) -- Credits
+print(wallet.Currency) -- nil
+```
+
+Grouped public functions receive their owning class's private state as the second argument. Private defaults are cloned per instance, private methods are callable only through that injected state, and inherited public methods retain access to the base class's private state. Legacy top-level methods continue to use the original `(self, ...)` signature.
+
+## Documented Errors
+
+Framework-owned failures now include a stable code and a direct documentation link:
+
+```text
+[Vanguard VG-NET-001] Vanguard network protocol mismatch (client 1, server 2)
+Docs: https://twrblxdevs.github.io/vanguard-docs/errors/#vg-net-001
+```
+
+Use `Vanguard.Error` or `Vanguard.Util.Error` to create the same structured errors in game code:
+
+```lua
+local message = Vanguard.Error.format("VG-CORE-001", "Inventory configuration is invalid")
+warn(message)
+```
+
+Network rejection names such as `INVALID_PAYLOAD` and `UNAUTHENTICATED` remain stable and now link to their corresponding error entry.
+
 ## Remotes
 
 `Vanguard.CreateSignal()` creates a reliable two-way remote event.
@@ -452,6 +511,8 @@ Global authentication and verification cannot be bypassed by a service rule. Rej
 
 Vanguard also stamps the remote container with its network protocol and server package version. Clients reject incompatible protocols before building service proxies and warn on package-version mismatches.
 
+Protocol `1` defines the `_VanguardRemotes` folder, service folders, `RemoteFunction` method transport, reliable or unreliable signal transport, remote-property `_Get` and `_Changed` children, server-supplied Player identity, guard ordering, and client compatibility handshake. Package `0.1.14` retains protocol `1` because it changes diagnostics and local helpers without changing those wire contracts.
+
 ```lua
 local info = Vanguard.GetNetworkInfo()
 
@@ -474,11 +535,14 @@ local Cache = require(Vanguard.Util.Cache)
 local Class = require(Vanguard.Util.Class)
 local Cleaner = require(Vanguard.Util.Cleaner)
 local Component = require(Vanguard.Util.Component)
+local Error = require(Vanguard.Util.Error)
 local Logger = require(Vanguard.Util.Logger)
+local Math = require(Vanguard.Util.Math)
 local NetworkGuard = require(Vanguard.Util.NetworkGuard)
 local Promise = require(Vanguard.Util.Promise)
 local RateLimiter = require(Vanguard.Util.RateLimiter)
 local Signal = require(Vanguard.Util.Signal)
+local Switch = require(Vanguard.Util.Switch)
 local Validator = require(Vanguard.Util.Validator)
 ```
 
@@ -520,6 +584,47 @@ if not allowed then
 	return nil, `Try again in {retryAfter} seconds`
 end
 ```
+
+### Math
+
+`Vanguard.Math` and `Vanguard.Util.Math` provide common gameplay-number helpers:
+
+```lua
+local damagePercent = Vanguard.Math.inverseLerp(0, maxHealth, currentHealth)
+local screenX = Vanguard.Math.map(worldX, -100, 100, 0, 1920, true)
+local stepped = Vanguard.Math.moveTowards(currentSpeed, targetSpeed, acceleration * deltaTime)
+local slot = Vanguard.Math.snap(rawSlot, 5)
+```
+
+The module also includes `round`, `lerp`, `approximatelyEqual`, `wrap`, `pingPong`, `smoothstep`, `smootherstep`, and `average`.
+
+### Switch
+
+`Vanguard.Switch` provides explicit JavaScript-style case dispatch without fall-through:
+
+```lua
+local nextState = Vanguard.Switch.new(state)
+	:Case("Paused", "Playing")
+	:Cases({ "Playing", "Resuming" }, function(current, suffix)
+		return current .. suffix
+	end)
+	:Default("Idle")
+	:Run("State")
+```
+
+Use `Switch.match(value, cases, defaultResult, ...)` for concise table-based dispatch. Cases use Luau equality and execute in declaration order.
+
+## Upcoming Features
+
+Vanguard's next development phases are tracked in the [public roadmap](https://twrblxdevs.github.io/vanguard-docs/roadmap/). Vanguard `0.1.15` is planned around the **Plugin Developer API**. Following priorities include:
+
+- a verified **Roblox Toolbox release** for non-Wally installation;
+- **additional utility modules** selected around common production needs;
+- **expanded documentation** with recipes, examples, and architecture references;
+- **Studio tooling** for generation, validation, diagnostics, and protocol inspection;
+- a clearer **community contribution** process with RFCs and scoped starter issues.
+
+Roadmap items are directional until assigned to a release. Compatibility and security work take priority over delivery dates.
 
 ## Build
 

@@ -1,17 +1,24 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-assert(RunService:IsClient(), "VanguardClient can only be required from the client")
-
 local rootModule = script.Parent
 local Cache = require(rootModule.Util.Cache)
 local Class = require(rootModule.Util.Class)
 local Component = require(rootModule.Util.Component)
+local VanguardError = require(rootModule.Util.Error)
 local Logger = require(rootModule.Util.Logger)
+local Math = require(rootModule.Util.Math)
 local Promise = require(rootModule.Util.Promise)
 local RateLimiter = require(rootModule.Util.RateLimiter)
 local RemoteProperty = require(rootModule.Util.RemoteProperty)
 local RemoteSignal = require(rootModule.Util.RemoteSignal)
+local Switch = require(rootModule.Util.Switch)
+
+VanguardError.assert(RunService:IsClient(), "VG-CORE-002", "VanguardClient can only be required from the client", 2)
+
+local function assert(condition, message)
+	return VanguardError.assert(condition, "VG-CORE-001", message, 3)
+end
 
 local REMOTES_FOLDER_NAME = "_VanguardRemotes"
 local NETWORK_PROTOCOL_ATTRIBUTE = "VanguardProtocol"
@@ -29,10 +36,13 @@ local defaultOptions = {
 local VanguardClient = {}
 
 VanguardClient.Name = "Vanguard"
-VanguardClient.Version = "0.1.13"
+VanguardClient.Version = "0.1.14"
 VanguardClient.NetworkProtocol = NETWORK_PROTOCOL_VERSION
 VanguardClient.Player = Players.LocalPlayer
 VanguardClient.Util = rootModule.Util
+VanguardClient.Error = VanguardError
+VanguardClient.Math = Math
+VanguardClient.Switch = Switch
 
 local controllers = {}
 local components = {}
@@ -157,14 +167,16 @@ local function requireModules(parent, deep, registerDefinition)
 		end)
 
 		if not loadedOk then
-			rootLogger:Error(`Failed to load module {module:GetFullName()}: {value}`)
+			rootLogger:Error(VanguardError.format("VG-MODULE-001", `Failed to load module {module:GetFullName()}`, value))
 			continue
 		end
 
 		if registerDefinition ~= nil then
 			local registeredOk, registeredValue = pcall(registerDefinition, value)
 			if not registeredOk then
-				rootLogger:Error(`Failed to register module {module:GetFullName()}: {registeredValue}`)
+				rootLogger:Error(
+					VanguardError.format("VG-MODULE-001", `Failed to register module {module:GetFullName()}`, registeredValue)
+				)
 				continue
 			end
 
@@ -183,16 +195,23 @@ local function getRemotesFolder()
 	end
 
 	remotesFolder = rootModule:WaitForChild(REMOTES_FOLDER_NAME, selectedOptions.RemoteTimeout)
-	assert(remotesFolder ~= nil, `Timed out waiting for {REMOTES_FOLDER_NAME}. Did the server call Vanguard.Start()?`)
+	VanguardError.assert(
+		remotesFolder ~= nil,
+		"VG-NET-002",
+		`Timed out waiting for {REMOTES_FOLDER_NAME}. Did the server call Vanguard.Start()?`,
+		2
+	)
 
 	local protocol = remotesFolder:GetAttribute(NETWORK_PROTOCOL_ATTRIBUTE)
 	local serverVersion = remotesFolder:GetAttribute(NETWORK_VERSION_ATTRIBUTE)
 	networkInfo.Protocol = protocol
 	networkInfo.ServerVersion = serverVersion
 
-	assert(
+	VanguardError.assert(
 		protocol == NETWORK_PROTOCOL_VERSION,
-		`Vanguard network protocol mismatch (client {NETWORK_PROTOCOL_VERSION}, server {tostring(protocol)})`
+		"VG-NET-001",
+		`Vanguard network protocol mismatch (client {NETWORK_PROTOCOL_VERSION}, server {tostring(protocol)})`,
+		2
 	)
 
 	if type(serverVersion) == "string" and serverVersion ~= VanguardClient.Version then
@@ -242,7 +261,7 @@ end
 local function buildService(serviceName)
 	local folder = getRemotesFolder()
 	local serviceFolder = folder:WaitForChild(serviceName, selectedOptions.RemoteTimeout)
-	assert(serviceFolder ~= nil, `Could not find remote service "{serviceName}"`)
+	VanguardError.assert(serviceFolder ~= nil, "VG-NET-002", `Could not find remote service "{serviceName}"`, 2)
 
 	local service = {
 		Name = serviceName,
@@ -268,7 +287,15 @@ local function runLifecycle(object, method)
 			debug.setmemorycategory(object.Name)
 		end
 
-		method(object)
+		local succeeded, lifecycleError = pcall(method, object)
+		if not succeeded then
+			VanguardError.raise(
+				"VG-LIFE-001",
+				`{object.Name} failed during VanguardInit`,
+				lifecycleError,
+				0
+			)
+		end
 		resolve()
 	end)
 end
@@ -314,7 +341,7 @@ local function registerControllerDefinition(value)
 	end
 
 	if registeredController ~= nil then
-		error(`Controller "{value.Name}" already exists`, 2)
+		VanguardError.raise("VG-REG-001", `Controller "{value.Name}" already exists`, nil, 2)
 	end
 
 	return VanguardClient.CreateController(value)
@@ -374,7 +401,12 @@ function VanguardClient.CreateClass(classDef, methodClassDef)
 		return VanguardClient.RegisterClass(classDef)
 	end
 
-	assert(type(classDef) == "table", `Class definition must be a table; got {type(classDef)}`)
+	VanguardError.assert(
+		type(classDef) == "table",
+		"VG-CLASS-001",
+		`Class definition must be a table; got {type(classDef)}`,
+		2
+	)
 
 	if type(classDef.Extends) == "string" then
 		local resolvedDefinition = table.clone(classDef)
@@ -388,14 +420,19 @@ end
 function VanguardClient.RegisterClass(class, methodClass)
 	class = normalizeMethodArg(class, methodClass)
 
-	assert(Class.isClass(class), "RegisterClass expects a class created by Vanguard.Util.Class")
+	VanguardError.assert(
+		Class.isClass(class),
+		"VG-CLASS-001",
+		"RegisterClass expects a class created by Vanguard.Util.Class",
+		2
+	)
 
 	local registeredClass = classes[class.Name]
 	if registeredClass == class then
 		return class
 	end
 
-	assert(registeredClass == nil, `Class "{class.Name}" already exists`)
+	VanguardError.assert(registeredClass == nil, "VG-REG-001", `Class "{class.Name}" already exists`, 2)
 	classes[class.Name] = class
 	return class
 end
@@ -420,7 +457,7 @@ function VanguardClient.GetClass(className, methodClassName)
 	end
 
 	assert(type(className) == "string", `Class name must be a string; got {type(className)}`)
-	return assert(classes[className], `Could not find class "{className}"`)
+	return VanguardError.assert(classes[className], "VG-REG-002", `Could not find class "{className}"`, 2)
 end
 
 function VanguardClient.HasClass(className, methodClassName)
@@ -454,8 +491,13 @@ function VanguardClient.CreateController(controllerDef, methodControllerDef)
 	assert(type(controllerDef) == "table", `Controller must be a table; got {type(controllerDef)}`)
 	assert(type(controllerDef.Name) == "string", `Controller.Name must be a string; got {type(controllerDef.Name)}`)
 	assert(#controllerDef.Name > 0, "Controller.Name must be a non-empty string")
-	assert(controllers[controllerDef.Name] == nil, `Controller "{controllerDef.Name}" already exists`)
-	assert(not started, "Controllers cannot be created after Vanguard.Start()")
+	VanguardError.assert(
+		controllers[controllerDef.Name] == nil,
+		"VG-REG-001",
+		`Controller "{controllerDef.Name}" already exists`,
+		2
+	)
+	VanguardError.assert(not started, "VG-LIFE-001", "Controllers cannot be created after Vanguard.Start()", 2)
 
 	local controller = controllerDef
 	decorateObject(controller)
@@ -514,10 +556,20 @@ function VanguardClient.GetController(controllerName, methodControllerName)
 
 	local registeredNames = getObjectNames(getSortedObjects(controllers))
 	if registeredNames == "" then
-		error(`Could not find controller "{controllerName}" (no controllers registered)`, 2)
+		VanguardError.raise(
+			"VG-REG-002",
+			`Could not find controller "{controllerName}" (no controllers registered)`,
+			nil,
+			2
+		)
 	end
 
-	error(`Could not find controller "{controllerName}" (registered controllers: {registeredNames})`, 2)
+	VanguardError.raise(
+		"VG-REG-002",
+		`Could not find controller "{controllerName}" (registered controllers: {registeredNames})`,
+		nil,
+		2
+	)
 end
 
 function VanguardClient.GetControllers()
@@ -532,7 +584,7 @@ function VanguardClient.CreateComponent(componentDef, methodComponentDef)
 		then componentDef
 		else Component.new(componentDef, VanguardClient)
 
-	assert(components[component.Name] == nil, `Component "{component.Name}" already exists`)
+	VanguardError.assert(components[component.Name] == nil, "VG-REG-001", `Component "{component.Name}" already exists`, 2)
 
 	component.Vanguard = VanguardClient
 	if component.Logger == nil then
@@ -568,7 +620,7 @@ function VanguardClient.GetComponent(componentName, methodComponentName)
 	end
 
 	assert(type(componentName) == "string", `Component name must be a string; got {type(componentName)}`)
-	return assert(components[componentName], `Could not find component "{componentName}"`)
+	return VanguardError.assert(components[componentName], "VG-REG-002", `Could not find component "{componentName}"`, 2)
 end
 
 function VanguardClient.GetComponents()
@@ -579,7 +631,7 @@ function VanguardClient.Start(options, methodOptions)
 	options = normalizeMethodArg(options, methodOptions)
 
 	if started then
-		return Promise.reject("Vanguard already started")
+		return Promise.reject(VanguardError.format("VG-LIFE-001", "Vanguard already started"))
 	end
 
 	configure(options)
@@ -629,7 +681,12 @@ function VanguardClient.Start(options, methodOptions)
 						debug.setmemorycategory(controller.Name)
 					end
 
-					startMethod(controller)
+					local succeeded, startError = pcall(startMethod, controller)
+					if not succeeded then
+						rootLogger:Error(
+							VanguardError.format("VG-LIFE-001", `{controller.Name} failed during VanguardStart`, startError)
+						)
+					end
 				end)
 			end
 		end
