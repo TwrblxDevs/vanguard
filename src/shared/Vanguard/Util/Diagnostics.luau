@@ -82,7 +82,6 @@ export type Diagnostics = {
 	Memory: () -> MemoryDiag,
 }
 
-
 local Diagnostics = {}
 Diagnostics.__index = Diagnostics
 
