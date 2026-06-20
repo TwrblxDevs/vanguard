@@ -324,6 +324,7 @@ export type UtilContainer = Instance & {
 	Class: ModuleScript,
 	Cleaner: ModuleScript,
 	Component: ModuleScript,
+	Diagnostics: ModuleScript,
 	Error: ModuleScript,
 	Logger: ModuleScript,
 	Math: ModuleScript,
