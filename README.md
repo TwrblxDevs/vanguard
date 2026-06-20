@@ -13,6 +13,7 @@ The complete documentation lives at [twrblxdevs.github.io/vanguard-docs](https:/
 - [Errors](https://twrblxdevs.github.io/vanguard-docs/errors/) and the complete [Utilities index](https://twrblxdevs.github.io/vanguard-docs/utilities/)
 - [API Reference](https://twrblxdevs.github.io/vanguard-docs/api-reference/), [Type System](https://twrblxdevs.github.io/vanguard-docs/type-system/), and [Troubleshooting](https://twrblxdevs.github.io/vanguard-docs/troubleshooting/)
 - [Roadmap](https://twrblxdevs.github.io/vanguard-docs/roadmap/) for upcoming platform, tooling, and community work
+- [Contributing](https://twrblxdevs.github.io/vanguard-docs/contributing/) for setup, commit conventions, testing, and pull request expectations
 
 ## Install
 
