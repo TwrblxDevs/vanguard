@@ -1,18 +1,29 @@
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 
-assert(RunService:IsServer(), "VanguardServer can only be required from the server.")
-
 local rootModule = script.Parent
 local Cache = require(rootModule.Util.Cache)
 local Class = require(rootModule.Util.Class)
 local Component = require(rootModule.Util.Component)
+local VanguardError = require(rootModule.Util.Error)
 local Logger = require(rootModule.Util.Logger)
+local Math = require(rootModule.Util.Math)
 local NetworkGuard = require(rootModule.Util.NetworkGuard)
 local Promise = require(rootModule.Util.Promise)
 local RateLimiter = require(rootModule.Util.RateLimiter)
 local RemoteProperty = require(rootModule.Util.RemoteProperty)
 local RemoteSignal = require(rootModule.Util.RemoteSignal)
+local Switch = require(rootModule.Util.Switch)
+
+VanguardError.assert(RunService:IsServer(), "VG-CORE-002", "VanguardServer can only be required from the server", 2)
+
+local function assert(condition, message)
+	return VanguardError.assert(condition, "VG-CORE-001", message, 3)
+end
+
+local function networkAssert(condition, message)
+	return VanguardError.assert(condition, "VG-NET-003", message, 3)
+end
 
 local REMOTES_FOLDER_NAME = "_VanguardRemotes"
 local NETWORK_PROTOCOL_ATTRIBUTE = "VanguardProtocol"
@@ -57,9 +68,12 @@ local defaultOptions = {
 local VanguardServer = {}
 
 VanguardServer.Name = "Vanguard"
-VanguardServer.Version = "0.1.13"
+VanguardServer.Version = "0.1.14"
 VanguardServer.NetworkProtocol = NETWORK_PROTOCOL_VERSION
 VanguardServer.Util = rootModule.Util
+VanguardServer.Error = VanguardError
+VanguardServer.Math = Math
+VanguardServer.Switch = Switch
 
 local services = {}
 local components = {}
@@ -147,37 +161,40 @@ end
 
 local function getNetworkOptions()
 	local options = selectedOptions.Network
-	assert(options == nil or type(options) == "table", "StartOptions.Network must be a table or nil")
+	networkAssert(options == nil or type(options) == "table", "StartOptions.Network must be a table or nil")
 	return options or {}
 end
 
 local function validateNetworkRule(rule, label)
-	assert(type(rule) == "table", `{label} must be a table`)
+	networkAssert(type(rule) == "table", `{label} must be a table`)
 	for key in rule do
-		assert(NETWORK_RULE_KEYS[key] == true, `{label} contains unknown field "{tostring(key)}"`)
+		networkAssert(NETWORK_RULE_KEYS[key] == true, `{label} contains unknown field "{tostring(key)}"`)
 	end
 end
 
 local function validateNetworkOptions()
 	local options = getNetworkOptions()
 	for key in options do
-		assert(NETWORK_OPTION_KEYS[key] == true, `StartOptions.Network contains unknown field "{tostring(key)}"`)
+		networkAssert(NETWORK_OPTION_KEYS[key] == true, `StartOptions.Network contains unknown field "{tostring(key)}"`)
 	end
 
 	if options.Default ~= nil then
 		validateNetworkRule(options.Default, "StartOptions.Network.Default")
 	end
 
-	assert(
+	networkAssert(
 		options.Authenticate == nil or type(options.Authenticate) == "function",
 		"StartOptions.Network.Authenticate must be a function or nil"
 	)
-	assert(options.Verify == nil or type(options.Verify) == "function", "StartOptions.Network.Verify must be a function or nil")
-	assert(
+	networkAssert(options.Verify == nil or type(options.Verify) == "function", "StartOptions.Network.Verify must be a function or nil")
+	networkAssert(
 		options.OnRejected == nil or type(options.OnRejected) == "function",
 		"StartOptions.Network.OnRejected must be a function or nil"
 	)
-	assert(options.LogRejected == nil or type(options.LogRejected) == "boolean", "StartOptions.Network.LogRejected must be a boolean or nil")
+	networkAssert(
+		options.LogRejected == nil or type(options.LogRejected) == "boolean",
+		"StartOptions.Network.LogRejected must be a boolean or nil"
+	)
 end
 
 local function validateServiceNetwork(service)
@@ -187,9 +204,9 @@ local function validateServiceNetwork(service)
 	end
 
 	for remoteName, rule in serviceNetwork do
-		assert(type(remoteName) == "string", `Service "{service.Name}" Network keys must be strings`)
+		networkAssert(type(remoteName) == "string", `Service "{service.Name}" Network keys must be strings`)
 		if remoteName ~= "Default" then
-			assert(
+			networkAssert(
 				remoteName ~= "Server" and service.Client[remoteName] ~= nil,
 				`Service "{service.Name}" Network rule "{remoteName}" does not match a Client remote`
 			)
@@ -225,7 +242,8 @@ local function formatNetworkRejection(rejection)
 		message ..= ` (retry in {string.format("%.2f", rejection.RetryAfter)}s)`
 	end
 
-	return message
+	local errorCode = VanguardError.getNetworkErrorCode(rejection.Code)
+	return `{message}\nDocs: {VanguardError.getDocsUrl(errorCode)}`
 end
 
 local function handleNetworkRejection(context, rejection)
@@ -266,7 +284,7 @@ local function compileRateLimit(rule)
 		return
 	end
 
-	assert(type(rateLimit) == "table", "Network RateLimit must be RateLimiter options, a limiter, false, or nil")
+	networkAssert(type(rateLimit) == "table", "Network RateLimit must be RateLimiter options, a limiter, false, or nil")
 	local options = table.clone(rateLimit)
 	if options.WeakKeys == nil then
 		options.WeakKeys = true
@@ -278,7 +296,7 @@ end
 local function createInboundGuard(service, remoteName, remoteType)
 	local options = getNetworkOptions()
 	local serviceNetwork = service.Network
-	assert(serviceNetwork == nil or type(serviceNetwork) == "table", `Service "{service.Name}" Network must be a table or nil`)
+	networkAssert(serviceNetwork == nil or type(serviceNetwork) == "table", `Service "{service.Name}" Network must be a table or nil`)
 	serviceNetwork = serviceNetwork or {}
 
 	local rule = NetworkGuard.mergeRules(options.Default, serviceNetwork.Default, serviceNetwork[remoteName])
@@ -525,7 +543,7 @@ local function createClientCallContext(service)
 
 		__newindex = function(_, key, value)
 			if key == "Server" then
-				error("Service.Client.Server is read-only", 2)
+				VanguardError.raise("VG-CORE-001", "Service.Client.Server is read-only", nil, 2)
 			end
 
 			service.Client[key] = value
@@ -610,7 +628,12 @@ local function buildServiceRemotes(service, remotesFolder)
 			propertyFolder.Parent = serviceFolder
 			service.Client[key] = RemoteProperty.Server.new(propertyFolder, value.InitialValue, inboundGuard)
 		else
-			error(`Unsupported remote value "{key}" on service "{service.Name}"`, 0)
+			VanguardError.raise(
+				"VG-NET-003",
+				`Unsupported remote value "{key}" on service "{service.Name}"`,
+				nil,
+				0
+			)
 		end
 	end
 
@@ -647,7 +670,15 @@ local function runLifecycle(object, method)
 			debug.setmemorycategory(object.Name)
 		end
 
-		method(object)
+		local succeeded, lifecycleError = pcall(method, object)
+		if not succeeded then
+			VanguardError.raise(
+				"VG-LIFE-001",
+				`{object.Name} failed during VanguardInit`,
+				lifecycleError,
+				0
+			)
+		end
 		resolve()
 	end)
 end
@@ -705,14 +736,16 @@ local function requireModules(parent, deep, registerDefinition)
 		end)
 
 		if not loadedOk then
-			rootLogger:Error(`Failed to load module {module:GetFullName()}: {value}`)
+			rootLogger:Error(VanguardError.format("VG-MODULE-001", `Failed to load module {module:GetFullName()}`, value))
 			continue
 		end
 
 		if registerDefinition ~= nil then
 			local registeredOk, registeredValue = pcall(registerDefinition, value)
 			if not registeredOk then
-				rootLogger:Error(`Failed to register module {module:GetFullName()}: {registeredValue}`)
+				rootLogger:Error(
+					VanguardError.format("VG-MODULE-001", `Failed to register module {module:GetFullName()}`, registeredValue)
+				)
 				continue
 			end
 
@@ -760,7 +793,7 @@ local function registerServiceDefinition(value)
 	end
 
 	if registeredService ~= nil then
-		error(`Service "{value.Name}" already exists`, 2)
+		VanguardError.raise("VG-REG-001", `Service "{value.Name}" already exists`, nil, 2)
 	end
 
 	return VanguardServer.CreateService(value)
@@ -849,7 +882,12 @@ function VanguardServer.CreateClass(classDef, methodClassDef)
 		return VanguardServer.RegisterClass(classDef)
 	end
 
-	assert(type(classDef) == "table", `Class definition must be a table; got {type(classDef)}`)
+	VanguardError.assert(
+		type(classDef) == "table",
+		"VG-CLASS-001",
+		`Class definition must be a table; got {type(classDef)}`,
+		2
+	)
 
 	if type(classDef.Extends) == "string" then
 		local resolvedDefinition = table.clone(classDef)
@@ -863,14 +901,19 @@ end
 function VanguardServer.RegisterClass(class, methodClass)
 	class = normalizeMethodArg(class, methodClass)
 
-	assert(Class.isClass(class), "RegisterClass expects a class created by Vanguard.Util.Class")
+	VanguardError.assert(
+		Class.isClass(class),
+		"VG-CLASS-001",
+		"RegisterClass expects a class created by Vanguard.Util.Class",
+		2
+	)
 
 	local registeredClass = classes[class.Name]
 	if registeredClass == class then
 		return class
 	end
 
-	assert(registeredClass == nil, `Class "{class.Name}" already exists`)
+	VanguardError.assert(registeredClass == nil, "VG-REG-001", `Class "{class.Name}" already exists`, 2)
 	classes[class.Name] = class
 	return class
 end
@@ -895,7 +938,7 @@ function VanguardServer.GetClass(className, methodClassName)
 	end
 
 	assert(type(className) == "string", `Class name must be a string; got {type(className)}`)
-	return assert(classes[className], `Could not find class "{className}"`)
+	return VanguardError.assert(classes[className], "VG-REG-002", `Could not find class "{className}"`, 2)
 end
 
 function VanguardServer.HasClass(className, methodClassName)
@@ -934,8 +977,8 @@ function VanguardServer.CreateService(serviceDef, methodServiceDef)
 		`Service.Priority must be a number if provided; got {type(serviceDef.Priority)}`
 	)
 	assert(serviceDef.Network == nil or type(serviceDef.Network) == "table", "Service.Network must be a table or nil")
-	assert(services[serviceDef.Name] == nil, `Service "{serviceDef.Name}" already exists`)
-	assert(not started, "Services cannot be created after Vanguard.Start()")
+	VanguardError.assert(services[serviceDef.Name] == nil, "VG-REG-001", `Service "{serviceDef.Name}" already exists`, 2)
+	VanguardError.assert(not started, "VG-LIFE-001", "Services cannot be created after Vanguard.Start()", 2)
 
 	local service = serviceDef
 
@@ -986,10 +1029,15 @@ function VanguardServer.GetService(serviceName, methodServiceName)
 
 	local registeredNames = getObjectNames(getSortedObjects(services))
 	if registeredNames == "" then
-		error(`Could not find service "{serviceName}" (no services registered)`, 2)
+		VanguardError.raise("VG-REG-002", `Could not find service "{serviceName}" (no services registered)`, nil, 2)
 	end
 
-	error(`Could not find service "{serviceName}" (registered services: {registeredNames})`, 2)
+	VanguardError.raise(
+		"VG-REG-002",
+		`Could not find service "{serviceName}" (registered services: {registeredNames})`,
+		nil,
+		2
+	)
 end
 
 function VanguardServer.GetServices()
@@ -1004,7 +1052,7 @@ function VanguardServer.CreateComponent(componentDef, methodComponentDef)
 		then componentDef
 		else Component.new(componentDef, VanguardServer)
 
-	assert(components[component.Name] == nil, `Component "{component.Name}" already exists`)
+	VanguardError.assert(components[component.Name] == nil, "VG-REG-001", `Component "{component.Name}" already exists`, 2)
 
 	component.Vanguard = VanguardServer
 	if component.Logger == nil then
@@ -1040,7 +1088,7 @@ function VanguardServer.GetComponent(componentName, methodComponentName)
 	end
 
 	assert(type(componentName) == "string", `Component name must be a string; got {type(componentName)}`)
-	return assert(components[componentName], `Could not find component "{componentName}"`)
+	return VanguardError.assert(components[componentName], "VG-REG-002", `Could not find component "{componentName}"`, 2)
 end
 
 function VanguardServer.GetComponents()
@@ -1068,7 +1116,7 @@ function VanguardServer.Start(options, methodOptions)
 	options = normalizeMethodArg(options, methodOptions)
 
 	if started then
-		return Promise.reject("Vanguard already started")
+		return Promise.reject(VanguardError.format("VG-LIFE-001", "Vanguard already started"))
 	end
 
 	configure(options)
@@ -1111,7 +1159,12 @@ function VanguardServer.Start(options, methodOptions)
 						debug.setmemorycategory(service.Name)
 					end
 
-					startMethod(service)
+					local succeeded, startError = pcall(startMethod, service)
+					if not succeeded then
+						rootLogger:Error(
+							VanguardError.format("VG-LIFE-001", `{service.Name} failed during VanguardStart`, startError)
+						)
+					end
 				end)
 			end
 		end

@@ -1,4 +1,9 @@
 local Players = game:GetService("Players")
+local VanguardError = require(script.Parent.Error)
+
+local function assert(condition, message)
+	return VanguardError.assert(condition, "VG-UTIL-001", message, 3)
+end
 
 export type ServerRemoteSignal = {
 	Connect: (ServerRemoteSignal, callback: (Player, ...any) -> ()) -> RBXScriptConnection,

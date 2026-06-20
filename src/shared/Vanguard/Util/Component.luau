@@ -1,6 +1,11 @@
 local CollectionService = game:GetService("CollectionService")
 
 local Cleaner = require(script.Parent.Cleaner)
+local VanguardError = require(script.Parent.Error)
+
+local function assert(condition, message)
+	return VanguardError.assert(condition, "VG-UTIL-001", message, 3)
+end
 
 type CleanerType = Cleaner.Cleaner
 

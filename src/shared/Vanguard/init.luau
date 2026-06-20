@@ -69,6 +69,68 @@ export type Cache = {
 	Destroy: (Cache) -> (),
 }
 
+export type ErrorDefinition = {
+	Title: string,
+	Summary: string,
+}
+
+export type VanguardError = {
+	Code: string,
+	Title: string,
+	Message: string,
+	DocsUrl: string,
+	Cause: any?,
+}
+
+export type ErrorUtil = {
+	new: (code: string, message: string?, cause: any?) -> VanguardError,
+	format: (code: string, message: string?, cause: any?) -> string,
+	raise: (code: string, message: string?, cause: any?, level: number?) -> (),
+	assert: <T>(condition: T, code: string, message: string?, level: number?) -> T,
+	is: (value: any) -> boolean,
+	getDefinition: (code: string) -> ErrorDefinition?,
+	getDefinitions: () -> { [string]: ErrorDefinition },
+	getDocsUrl: (code: string) -> string,
+	getNetworkErrorCode: (rejectionCode: string) -> string,
+}
+
+export type MathUtil = {
+	EPSILON: number,
+	TAU: number,
+	round: (value: number, decimalPlaces: number?) -> number,
+	lerp: (startValue: number, endValue: number, alpha: number) -> number,
+	inverseLerp: (startValue: number, endValue: number, value: number) -> number,
+	map: (
+		value: number,
+		inputMinimum: number,
+		inputMaximum: number,
+		outputMinimum: number,
+		outputMaximum: number,
+		clampResult: boolean?
+	) -> number,
+	approximatelyEqual: (left: number, right: number, epsilon: number?) -> boolean,
+	wrap: (value: number, minimum: number, maximum: number) -> number,
+	pingPong: (value: number, length: number) -> number,
+	smoothstep: (minimum: number, maximum: number, value: number) -> number,
+	smootherstep: (minimum: number, maximum: number, value: number) -> number,
+	moveTowards: (current: number, target: number, maxDelta: number) -> number,
+	snap: (value: number, increment: number) -> number,
+	average: (...number) -> number,
+}
+
+export type Switch = {
+	Case: (Switch, expected: any, result: any) -> Switch,
+	Cases: (Switch, expectedValues: { any }, result: any) -> Switch,
+	Default: (Switch, result: any) -> Switch,
+	HasMatch: (Switch) -> boolean,
+	Run: (Switch, ...any) -> ...any,
+}
+
+export type SwitchUtil = {
+	new: (value: any) -> Switch,
+	match: (value: any, cases: { [any]: any }, defaultResult: any?, ...any) -> ...any,
+}
+
 export type Class = {
 	Name: string,
 	Super: Class?,
@@ -76,6 +138,7 @@ export type Class = {
 	new: (...any) -> any,
 	Extend: (Class, { [string]: any }) -> Class,
 	IsA: (any, Class | string) -> boolean,
+	SetStatic: (Class, key: string, value: any) -> Class,
 	[string]: any,
 }
 
@@ -83,6 +146,9 @@ export type ClassDefinition = {
 	Name: string,
 	Extends: Class | string?,
 	Constructor: ((self: any, ...any) -> ())?,
+	Public: { [string]: any }?,
+	Private: { [string]: any }?,
+	Static: { [string]: any }?,
 	[string]: any,
 }
 
@@ -258,13 +324,16 @@ export type UtilContainer = Instance & {
 	Class: ModuleScript,
 	Cleaner: ModuleScript,
 	Component: ModuleScript,
+	Error: ModuleScript,
 	Logger: ModuleScript,
+	Math: ModuleScript,
 	NetworkGuard: ModuleScript,
 	Promise: ModuleScript,
 	RateLimiter: ModuleScript,
 	RemoteProperty: ModuleScript,
 	RemoteSignal: ModuleScript,
 	Signal: ModuleScript,
+	Switch: ModuleScript,
 	Validator: ModuleScript,
 }
 
@@ -278,7 +347,10 @@ export type Vanguard = {
 	Controllers: { [string]: ControllerDefinition }?,
 	Components: { [string]: Component },
 	Classes: { [string]: Class },
+	Error: ErrorUtil,
 	Logger: Logger,
+	Math: MathUtil,
+	Switch: SwitchUtil,
 
 	Configure: ((options: StartOptions?) -> StartOptions) & ((self: any, options: StartOptions?) -> StartOptions),
 	GetConfig: (() -> StartOptions) & ((self: any) -> StartOptions),

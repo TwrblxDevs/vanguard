@@ -1,6 +1,11 @@
 local Players = game:GetService("Players")
 
+local VanguardError = require(script.Parent.Error)
 local Signal = require(script.Parent.Signal)
+
+local function assert(condition, message)
+	return VanguardError.assert(condition, "VG-UTIL-001", message, 3)
+end
 
 export type Disconnectable = {
 	Disconnect: (Disconnectable) -> (),
@@ -105,11 +110,11 @@ function ServerRemoteProperty.new(folder, initialValue, inboundGuard)
 		if inboundGuard ~= nil then
 			local guardOk, allowed, message = pcall(inboundGuard, player)
 			if not guardOk then
-				error("[VanguardNetwork/GUARD_ERROR] A server network guard failed", 0)
+				error(VanguardError.format("VG-NET-105", "A server network guard failed", allowed), 0)
 			end
 
 			if allowed ~= true then
-				error(message or "[VanguardNetwork/REJECTED] Property read rejected", 0)
+				error(message or VanguardError.format("VG-NET-003", "Property read rejected"), 0)
 			end
 		end
 
