@@ -100,6 +100,10 @@ local DEFINITIONS: { [string]: Definition } = {
 		Title = "Invalid utility usage",
 		Summary = "A Vanguard utility received an invalid argument or was used after cleanup.",
 	},
+	["VG-DIAG-001"] = {
+		Title = "Memory tracking disabled",
+		Summary = "Vanguard attempted to use a function which was disabled because memory tracking is disabled on the client."
+	}
 }
 
 local NETWORK_REJECTION_CODES = {
